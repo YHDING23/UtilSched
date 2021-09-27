@@ -1,24 +1,23 @@
 package utilsched
 
 import (
-    "context"
-    "fmt"
-    "regexp"
-    "strconv"
-    "os"
-    "errors"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"regexp"
+	"strconv"
 
-    "k8s.io/klog"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 	framework "k8s.io/kubernetes/pkg/scheduler/framework"
-    meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-    "k8s.io/client-go/kubernetes"
-    "k8s.io/client-go/tools/clientcmd"
 	v1 "k8s.io/api/core/v1"
- 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 
- 	"github.com/YHDING23/UtilSched/pkg/plugins/utilsched/collection"
-
+	"github.com/YHDING23/UtilSched/pkg/plugins/utilsched/collection"
 )
 
 const (
@@ -27,20 +26,19 @@ const (
 )
 
 var (
-    _ framework.ScorePlugin     = &UtilSched{}
-    _ framework.ScoreExtensions = &UtilSched{}
+	_ framework.ScorePlugin     = &UtilSched{}
+	_ framework.ScoreExtensions = &UtilSched{}
 
 //     scheme = runtime.NewScheme()
 )
 
 const (
-	CPUUsageWeight          = 3
-	GPUModelWeight_k80      = 6
-	GPUModelWeight_TITANX   = 7
-	GPUModelWeight_V100     = 10
-	ActualWeight            = 10
-	NodeWeight              = 5
-
+	CPUUsageWeight        = 3
+	GPUModelWeight_k80    = 6
+	GPUModelWeight_TITANX = 7
+	GPUModelWeight_V100   = 10
+	ActualWeight          = 10
+	NodeWeight            = 5
 )
 
 type UtilSched struct {
@@ -54,7 +52,7 @@ type Args struct {
 }
 
 func New(plArgs *runtime.Unknown, h framework.Handle) (framework.Plugin, error) {
-    args := &Args{}
+	args := &Args{}
 	if err := framework.DecodeInto(plArgs, args); err != nil {
 		return nil, err
 	}
@@ -68,7 +66,6 @@ func New(plArgs *runtime.Unknown, h framework.Handle) (framework.Plugin, error) 
 func (u *UtilSched) Name() string {
 	return Name
 }
-
 
 func (u *UtilSched) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) (int64, *framework.Status) {
 	// Get Node Info
@@ -88,7 +85,7 @@ func (u *UtilSched) Score(ctx context.Context, state *framework.CycleState, p *v
 }
 
 func CalculateScore(state *framework.CycleState, pod *v1.Pod, nodeName string) (uint64, error) {
-    state.RLock()
+	state.RLock()
 	d, err := state.Read("Anno")
 	state.RUnlock()
 	if err != nil {
@@ -104,27 +101,27 @@ func CalculateScore(state *framework.CycleState, pod *v1.Pod, nodeName string) (
 }
 
 func CalculateBasicScore(nodeValue collection.NodeValue) uint64 {
-    switch nodeValue.Model {
-        case "Tesla K80":
-            modelScore = uint64(nodeValue.MemSize * GPUModelWeight_k80 * nodeValue.Count / 12)
-        case "TITAN X (Pascal)":
-            modelScore = uint64(nodeValue.MemSize * GPUModelWeight_TITANX * nodeValue.Count / 12)
-        case "V100":
-            modelScore = uint64(nodeValue.MemSize * GPUModelWeight_V100 * nodeValue.Count / 12)
-    }
-    return modelScore
+	switch nodeValue.Model {
+	case "Tesla K80":
+		modelScore = uint64(nodeValue.MemSize * GPUModelWeight_k80 * nodeValue.Count / 12)
+	case "TITAN X (Pascal)":
+		modelScore = uint64(nodeValue.MemSize * GPUModelWeight_TITANX * nodeValue.Count / 12)
+	case "V100":
+		modelScore = uint64(nodeValue.MemSize * GPUModelWeight_V100 * nodeValue.Count / 12)
+	}
+	return modelScore
 }
 
 func CalculateActualScore(data collection.Data) uint64 {
-    actualScore := uint64(0)
-    for _, card := range data.GPUValue{
-        actualScore += uint64(card.mem_used / (card.mem_used + card.mem_free))
-    }
-    return actualScore
+	actualScore := uint64(0)
+	for _, card := range data.GPUValue {
+		actualScore += uint64(card.mem_used / (card.mem_used + card.mem_free))
+	}
+	return actualScore
 }
 
-func CurPodCPUUsageScore(pod *v1.Pod) uint64{
-    var curPodCPUUsage int64
+func CurPodCPUUsageScore(pod *v1.Pod) uint64 {
+	var curPodCPUUsage int64
 	for _, container := range pod.Spec.Containers {
 		curPodCPUUsage += PredictUtilisation(&container)
 	}
@@ -183,4 +180,3 @@ func StrToInt64(str string) int64 {
 		return int64(i)
 	}
 }
-
